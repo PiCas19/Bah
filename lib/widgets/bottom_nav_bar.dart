@@ -20,33 +20,44 @@ class _BottomNavBarState extends State<BottomNavBar> {
   Widget build(BuildContext context) {
     return BottomNavigationBar(
       type: BottomNavigationBarType.fixed,
-      backgroundColor: Colors.lightBlue, // Sfondo blu chiaro
-      selectedItemColor: Colors.yellow, // Colore dell'icona selezionata
-      unselectedItemColor: Colors.white54, // Colore dell'icona non selezionata
+      backgroundColor: Colors.white, // Set background color to white
+      selectedItemColor: Colors.blue, // Color for selected item
+      unselectedItemColor: Colors.grey, // Color for unselected items
       currentIndex: _selectedIndex,
       onTap: _onItemTapped,
-      items: const [
+      items: [
         BottomNavigationBarItem(
-          icon: Icon(Icons.search),
+          icon: _buildIcon(Icons.search, 0),
           label: 'Esplora',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.favorite),
+          icon: _buildIcon(Icons.favorite_outline, 1), // Outline icon for favorite
           label: 'Preferiti',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.insert_drive_file),
+          icon: _buildIcon(Icons.directions_boat, 2), // Boat icon for 'Itinerario'
           label: 'Itinerario',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.message),
+          icon: _buildIcon(Icons.message_outlined, 3), // Outline message icon
           label: 'Messaggi',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.person),
+          icon: _buildIcon(Icons.person_outline, 4), // Outline profile icon
           label: 'Profilo',
         ),
       ],
+    );
+  }
+
+  Widget _buildIcon(IconData icon, int index) {
+    return Container(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: _selectedIndex == index ? Colors.blue.shade100 : Colors.transparent, // Blue background for selected
+      ),
+      padding: EdgeInsets.all(8), // Spacing around the icon
+      child: Icon(icon, size: 24), // Icon size
     );
   }
 }
