@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "613050448486",
+    "project_id": "bah-6eb69",
+    "storage_bucket": "bah-6eb69.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:613050448486:android:e31dd68634cae2b24dcba7",
+        "android_client_info": {
+          "package_name": "com.bah.bah"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCaO5Z46S1fcW_VNNVTowo2LRJgE016t5o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
