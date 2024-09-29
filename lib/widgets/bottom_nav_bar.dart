@@ -29,7 +29,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        body: _pages[_selectedIndex],
+      body: _pages[_selectedIndex],
         bottomNavigationBar:BottomNavigationBar(
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white, // Set background color to white

@@ -1,5 +1,4 @@
-import 'package:bah/pages/profile_page.dart';
-import 'package:bah/pages/search_page.dart';
+import 'package:bah/widgets/bottom_nav_bar.dart';
 import 'package:bah/widgets/my_button.dart';
 import 'package:flutter/material.dart';
 
@@ -82,8 +81,7 @@ class _NicknamePageState extends State<NicknamePage> {
                   onPressed: (){
                     Navigator.push(
                       context,
-                      //MaterialPageRoute(builder: (context) => const ProfilePage()),
-                      MaterialPageRoute(builder: (context) => const SearchPage()),
+                      MaterialPageRoute(builder: (context) => const BottomNavBar()),
                     );
                   },
               ),

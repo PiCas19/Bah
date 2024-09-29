@@ -40,7 +40,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     Column(
                       children: [
                         CircleAvatar(
-                          backgroundImage: AssetImage(StaticVar.PIER_2),
+                          backgroundImage: AssetImage(StaticVar.PIER_1),
                           radius: 50,
                         ),
 
@@ -297,7 +297,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
       ),
-      bottomNavigationBar: const BottomNavBar(),
     );
   }
 }
