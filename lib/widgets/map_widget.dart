@@ -38,22 +38,25 @@ class _MapWidgetState extends State<MapWidget> {
     _getCurrentLocation();
     _loadBeaches();
     _scrollController.addListener(_onScroll);
+    _initializeSearchQuery();
+
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _initializeSearchQuery() {
     if (widget.searchQuery != null) {
       _searchController.text = widget.searchQuery!;
       _searchLocation(widget.searchQuery!);
     }
+  }
 
-    _searchController.addListener(() {
-      if (_debounce?.isActive ?? false) _debounce!.cancel();
-      _debounce = Timer(const Duration(milliseconds: 500), () {
-        if (_searchController.text.isNotEmpty) {
-          _searchLocation(_searchController.text);
-          // Chiama il callback per aggiornare la ricerca
-          if (widget.onSearchQueryChanged != null) {
-            widget.onSearchQueryChanged!(_searchController.text);
-          }
-        }
-      });
+  void _onSearchChanged() {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      if (_searchController.text.isNotEmpty) {
+        _searchLocation(_searchController.text);
+        widget.onSearchQueryChanged?.call(_searchController.text);
+      }
     });
   }
 
@@ -71,35 +74,54 @@ class _MapWidgetState extends State<MapWidget> {
   }
 
   Future<void> _getCurrentLocation() async {
-    Position position = await Geolocator.getCurrentPosition();
-    setState(() {
-      _currentPosition = LatLng(position.latitude, position.longitude);
-    });
+    try {
+      Position position = await Geolocator.getCurrentPosition();
+      setState(() {
+        _currentPosition = LatLng(position.latitude, position.longitude);
+        //_moveToCurrentPosition(); // Move to current position when location is found
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Unable to get location: $e")));
+    }
+  }
+
+  void _animateCamera(LatLng target) {
+    _mapController?.animateCamera(CameraUpdate.newLatLng(target));
   }
 
   Future<void> _searchLocation(String query) async {
     try {
       List<Location> locations = await locationFromAddress(query);
       if (locations.isNotEmpty) {
+        // Adding a small delay before proceeding
+        await Future.delayed(const Duration(seconds: 1));
+
         _searchedPosition = LatLng(locations[0].latitude, locations[0].longitude);
-        _mapController?.animateCamera(CameraUpdate.newLatLng(_searchedPosition!));
-
-        const double radiusInMeters = 10000;
-        List<Beach> nearbyBeaches = _allBeaches.where((beach) {
-          double distanceInMeters = Geolocator.distanceBetween(
-            _searchedPosition!.latitude,
-            _searchedPosition!.longitude,
-            beach.coordinates.latitude,
-            beach.coordinates.longitude,
-          );
-          return distanceInMeters <= radiusInMeters;
-        }).toList();
-
-        _updateMarkers(nearbyBeaches);
+        _animateCamera(_searchedPosition!);
+        _filterNearbyBeaches(_searchedPosition!);
       }
     } catch (e) {
-      print("Error searching for location: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error searching location: $e")),
+      );
     }
+  }
+
+
+  void _filterNearbyBeaches(LatLng position) {
+    const double radiusInMeters = 10000;
+    List<Beach> nearbyBeaches = _allBeaches.where((beach) {
+      double distance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        beach.coordinates.latitude,
+        beach.coordinates.longitude,
+      );
+      return distance <= radiusInMeters;
+    }).toList();
+
+    _updateMarkers(nearbyBeaches);
   }
 
   void _updateMarkers(List<Beach> beaches) {
@@ -158,11 +180,7 @@ class _MapWidgetState extends State<MapWidget> {
         return Container(
           padding: const EdgeInsets.all(16),
           height: 400,
-          child: Column(
-            children: [
-              _buildMarkedBeachesCard(),
-            ],
-          ),
+          child: _buildMarkedBeachesCard(),
         );
       },
     );
@@ -278,6 +296,7 @@ class _MapWidgetState extends State<MapWidget> {
     return stars;
   }
 
+  // TODO rileggere funzione di spostamento marker
   void _onScroll() {
     double scrollPosition = _scrollController.position.pixels;
     double itemHeight = 100;
