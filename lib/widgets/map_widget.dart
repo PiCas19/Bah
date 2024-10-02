@@ -4,11 +4,13 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import '../controllers/beach_controller.dart';
 import '../models/beach_model.dart';
+import 'dart:async';
 
 class MapWidget extends StatefulWidget {
   final String? searchQuery;
+  final Function(String)? onSearchQueryChanged;
 
-  const MapWidget({Key? key, this.searchQuery}) : super(key: key);
+  const MapWidget({Key? key, this.searchQuery, this.onSearchQueryChanged}) : super(key: key);
 
   @override
   State<MapWidget> createState() => _MapWidgetState();
@@ -23,90 +25,123 @@ class _MapWidgetState extends State<MapWidget> {
   Beach? _selectedBeach;
   final BeachController _beachController = BeachController();
   final Set<String> _favoriteBeaches = {};
-  List<Beach> _allBeaches = []; // Store all beaches
-  final List<Beach> _markedBeaches = []; // Store currently marked beaches
-  final ScrollController _scrollController =
-  ScrollController(); // Add scroll controller
+  List<Beach> _allBeaches = [];
+  final List<Beach> _markedBeaches = [];
+  final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
-    _loadBeaches(); // Load all beaches on init
-    _scrollController.addListener(_onScroll); // Listen to scroll changes
+    _loadBeaches();
+    _scrollController.addListener(_onScroll);
+    _initializeSearchQuery();
+
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _initializeSearchQuery() {
+    if (widget.searchQuery != null) {
+      _searchController.text = widget.searchQuery!;
+      _searchLocation(widget.searchQuery!);
+    }
+  }
+
+  void _onSearchChanged() {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      if (_searchController.text.isNotEmpty) {
+        _searchLocation(_searchController.text);
+        widget.onSearchQueryChanged?.call(_searchController.text);
+      }
+    });
   }
 
   @override
   void dispose() {
-    _scrollController.dispose(); // Dispose scroll controller
+    _scrollController.dispose();
+    _searchController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
   Future<void> _loadBeaches() async {
     _allBeaches = await _beachController.getBeaches();
-    print(_allBeaches);
-    _updateMarkers(_allBeaches); // Update markers with all beaches
+    _updateMarkers(_allBeaches);
   }
 
   Future<void> _getCurrentLocation() async {
-    Position position = await Geolocator.getCurrentPosition();
-    setState(() {
-      _currentPosition = LatLng(position.latitude, position.longitude);
-    });
+    try {
+      Position position = await Geolocator.getCurrentPosition();
+      setState(() {
+        _currentPosition = LatLng(position.latitude, position.longitude);
+        //_moveToCurrentPosition(); // Move to current position when location is found
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Unable to get location: $e")));
+    }
+  }
+
+  void _animateCamera(LatLng target) {
+    _mapController?.animateCamera(CameraUpdate.newLatLng(target));
   }
 
   Future<void> _searchLocation(String query) async {
     try {
       List<Location> locations = await locationFromAddress(query);
       if (locations.isNotEmpty) {
-        _searchedPosition =
-            LatLng(locations[0].latitude, locations[0].longitude);
-        _mapController
-            ?.animateCamera(CameraUpdate.newLatLng(_searchedPosition!));
+        // Adding a small delay before proceeding
+        await Future.delayed(const Duration(seconds: 1));
 
-        const double radiusInMeters = 10000;
-
-        List<Beach> nearbyBeaches = _allBeaches.where((beach) {
-          double distanceInMeters = Geolocator.distanceBetween(
-            _searchedPosition!.latitude,
-            _searchedPosition!.longitude,
-            beach.coordinates.latitude,
-            beach.coordinates.longitude,
-          );
-          return distanceInMeters <= radiusInMeters;
-        }).toList();
-
-
-        _updateMarkers(nearbyBeaches);
+        _searchedPosition = LatLng(locations[0].latitude, locations[0].longitude);
+        _animateCamera(_searchedPosition!);
+        _filterNearbyBeaches(_searchedPosition!);
       }
     } catch (e) {
-      print("Error searching for location: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error searching location: $e")),
+      );
     }
+  }
+
+
+  void _filterNearbyBeaches(LatLng position) {
+    const double radiusInMeters = 10000;
+    List<Beach> nearbyBeaches = _allBeaches.where((beach) {
+      double distance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        beach.coordinates.latitude,
+        beach.coordinates.longitude,
+      );
+      return distance <= radiusInMeters;
+    }).toList();
+
+    _updateMarkers(nearbyBeaches);
   }
 
   void _updateMarkers(List<Beach> beaches) {
     _markers.clear();
-    _markedBeaches.clear(); // Clear the previously marked beaches
+    _markedBeaches.clear();
     for (var beach in beaches) {
       _markers.add(
         Marker(
           markerId: MarkerId(beach.name),
-          position:
-          LatLng(beach.coordinates.latitude, beach.coordinates.longitude),
-          infoWindow: InfoWindow(
-            title: beach.name,
-            snippet: '${beach.place} - Rating: ${beach.rating}',
-          ),
+          position: LatLng(beach.coordinates.latitude, beach.coordinates.longitude),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
           onTap: () {
             setState(() {
               _selectedBeach = beach;
             });
-            _showBeachDetails(beach); // Show beach details in modal
+            _showBeachDetails(beach);
           },
         ),
       );
-      _markedBeaches.add(beach); // Add to marked beaches
+      _markedBeaches.add(beach);
     }
     setState(() {});
   }
@@ -123,8 +158,7 @@ class _MapWidgetState extends State<MapWidget> {
   Future<void> _moveToSelectedBeach() async {
     if (_selectedBeach != null) {
       _mapController?.animateCamera(CameraUpdate.newLatLng(
-        LatLng(_selectedBeach!.coordinates.latitude,
-            _selectedBeach!.coordinates.longitude),
+        LatLng(_selectedBeach!.coordinates.latitude, _selectedBeach!.coordinates.longitude),
       ));
     }
   }
@@ -139,7 +173,6 @@ class _MapWidgetState extends State<MapWidget> {
     });
   }
 
-  // Show the beach details in a modal bottom sheet
   void _showBeachDetails(Beach? beach) {
     showModalBottomSheet(
       context: context,
@@ -147,11 +180,7 @@ class _MapWidgetState extends State<MapWidget> {
         return Container(
           padding: const EdgeInsets.all(16),
           height: 400,
-          child: Column(
-            children: [
-              _buildMarkedBeachesCard(), // Show only marked beaches in the modal
-            ],
-          ),
+          child: _buildMarkedBeachesCard(),
         );
       },
     );
@@ -161,24 +190,22 @@ class _MapWidgetState extends State<MapWidget> {
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedBeach = beach; // Update selected beach
+          _selectedBeach = beach;
         });
-        _moveToSelectedBeach(); // Move to selected beach on map
-        Navigator.pop(context); // Close the modal
-        _showBeachDetails(beach); // Show the selected beach details
+        _moveToSelectedBeach();
+        Navigator.pop(context);
+        _showBeachDetails(beach);
       },
       child: Container(
         padding: const EdgeInsets.all(16),
-        color: isSelected
-            ? Colors.blue[50]
-            : Colors.white, // Highlight selected beach
+        color: isSelected ? Colors.blue[50] : Colors.white,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Stack(
               children: [
                 Image.network(
-                  beach.url, // Assuming your Beach model has imageUrl
+                  beach.url,
                   width: double.infinity,
                   height: 150,
                   fit: BoxFit.cover,
@@ -192,8 +219,7 @@ class _MapWidgetState extends State<MapWidget> {
                       padding: const EdgeInsets.all(8),
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        color:
-                        Colors.white, // Background color for the heart icon
+                        color: Colors.white,
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black26,
@@ -220,10 +246,8 @@ class _MapWidgetState extends State<MapWidget> {
               children: [
                 Text(
                   beach.name,
-                  style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                // Stars on the right
                 Row(
                   children: _buildRatingStars(beach.rating),
                 ),
@@ -231,7 +255,7 @@ class _MapWidgetState extends State<MapWidget> {
             ),
             const SizedBox(height: 8),
             const Text(
-              "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book.", // Assuming your Beach model has description
+              "Lorem Ipsum is simply dummy text of the printing and typesetting industry.",
               style: TextStyle(fontSize: 14),
             ),
           ],
@@ -243,7 +267,7 @@ class _MapWidgetState extends State<MapWidget> {
   Widget _buildMarkedBeachesCard() {
     return Expanded(
       child: ListView.builder(
-        controller: _scrollController, // Set the scroll controller
+        controller: _scrollController,
         itemCount: _markedBeaches.length,
         itemBuilder: (context, index) {
           Beach beach = _markedBeaches[index];
@@ -272,26 +296,17 @@ class _MapWidgetState extends State<MapWidget> {
     return stars;
   }
 
+  // TODO rileggere funzione di spostamento marker
   void _onScroll() {
-    // Calculate the current index based on scroll position
     double scrollPosition = _scrollController.position.pixels;
-    double itemHeight = 100; // Adjust based on your item height
+    double itemHeight = 100;
     int currentIndex = (scrollPosition / itemHeight).floor();
 
     if (currentIndex >= 0 && currentIndex < _markedBeaches.length) {
       setState(() {
-        _selectedBeach = _markedBeaches[currentIndex]; // Update selected beach
+        _selectedBeach = _markedBeaches[currentIndex];
       });
-      _moveToSelectedBeach(); // Move to selected beach on map
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant MapWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.searchQuery != null &&
-        widget.searchQuery != oldWidget.searchQuery) {
-      _searchLocation(widget.searchQuery!);
+      _moveToSelectedBeach();
     }
   }
 
@@ -310,30 +325,42 @@ class _MapWidgetState extends State<MapWidget> {
           onMapCreated: (controller) {
             _mapController = controller;
           },
-          onCameraMove: (position) {
-            setState(() {
-              _showCurrentLocationIcon = true;
-            });
-          },
           zoomControlsEnabled: false,
           markers: _markers,
-          onTap: (_) {
-            setState(() {
-              _selectedBeach = null; // Deselect beach when tapping on map
-            });
-          },
         ),
-        if (_showCurrentLocationIcon)
-          Positioned(
-            bottom: 80,
-            right: 10,
-            child: FloatingActionButton(
-              backgroundColor: Colors.white,
-              foregroundColor: Colors.blue,
-              onPressed: _moveToCurrentPosition,
-              child: const Icon(Icons.my_location),
+        Positioned(
+          top: 50,
+          left: 10,
+          right: 10,
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              filled: true,
+              hintStyle: const TextStyle(fontSize: 20.0, color: Colors.grey),
+              prefixIcon: const Icon(Icons.search, color: Colors.lightBlue),
+              fillColor: Colors.white,
+              hintText: 'Cerca una spiaggia...',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(25.0),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 15.0,
+                horizontal: 20.0,
+              ),
             ),
           ),
+        ),
+        Positioned(
+          bottom: 20,
+          right: 20,
+          child: FloatingActionButton(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.blue,
+            onPressed: _moveToCurrentPosition,
+            child: const Icon(Icons.my_location),
+          ),
+        ),
       ],
     );
   }
